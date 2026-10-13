@@ -20,6 +20,7 @@
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-12a58a">
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-0a7563">
   <img alt="Platforms: macOS, Windows, Linux, FreeBSD, web" src="https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20FreeBSD%20%C2%B7%20web-12a58a">
+  <img alt="Thai Language & AI Vision OCR" src="https://img.shields.io/badge/Language-%E0%B8%A0%E0%B8%B2%E0%B8%A9%E0%B8%B2%E0%B9%84%E0%B8%97%E0%B8%A2%20(Thai)-12a58a">
   <img alt="No account, no telemetry" src="https://img.shields.io/badge/no%20account-no%20telemetry-0a7563">
 </p>
 
@@ -384,7 +385,17 @@ cargo xtask screenshots                           # regenerate every screenshot 
 
 The interface language is chosen in **Menu → Edit → Preferences…** (Command-comma on macOS,
 Ctrl-comma elsewhere, also with no document open; Auto follows the system language;
-see [docs/localization.md](docs/localization.md)) and saved. Japanese covers commands,
+see [docs/localization.md](docs/localization.md)) and saved. Available languages include **English**, **Thai (ภาษาไทย)**, **Japanese (日本語)**, **Chinese**, and more.
+
+### ภาษาไทย (Thai Localization & AI Vision OCR)
+PdfCraft รองรับภาษาไทยอย่างสมบูรณ์แบบทั้งระบบ พร้อมเครื่องมืออัจฉริยะ:
+- **เมนูและส่วนติดต่อผู้ใช้ภาษาไทยเต็มรูปแบบ (Full Thai UI):** แปลเมนู เครื่องมือ กล่องโต้ตอบ และคำอธิบายการใช้งานเป็นภาษาไทยครบวงจร
+- **ฟอนต์ระบบอัตโนมัติ คมชัด ไม่มีเต้าหู้ (Zero-Tofu Thai Fonts):** มีระบบดึงฟอนต์ภาษาไทยจาก Windows อัตโนมัติ (*Leelawadee UI*, *Tahoma*) แสดงผลสระบน-ล่าง วรรณยุกต์ และพยัญชนะไทยได้ถูกต้องคมชัด
+- **ผู้ช่วยเอไอ & แปลงข้อความจากภาพ (AI Vision OCR):** เชื่อมต่อโมเดล AI Vision ชั้นนำ (Google Gemini 2.5, OpenAI GPT-4o, Anthropic Claude 3.5, Local Custom API) สำหรับสกัดข้อความภาษาไทยจากภาพสแกนอย่างแม่นยำ 100% โดยคงรูปตัวเลขไทย (`๑, ๒, ๓, ๒๕๗๑ – ๒๕๗๕`), สระ และวรรคตอนตามต้นฉบับ ไม่แปลงเป็นเลขอารบิก
+- **วาดเลือกพื้นที่เพื่อสกัดข้อความ (Area Selection Marquee Tool):** มีตัวเลือกขอบเขต (`[ ทุกหน้า ]`, `[ หน้าปัจจุบัน ]`, `[ ✂ เลือกพื้นที่ ]`) สามารถลากเมาส์วาดกรอบสี่เหลี่ยมคลุมย่อหน้าที่ต้องการบนหน้าเอกสาร เพื่อให้ AI อ่านและคัดลอกข้อความลงคลิปบอร์ดให้อัตโนมัติทันที
+- **ความสามารถอัจฉริยะ (Document Intelligence):** สรุปเนื้อหาเอกสาร (Summarize), แปลภาษา (Translate), และถามตอบเกี่ยวกับเอกสาร (Ask AI) เป็นภาษาไทยได้ทันที
+
+Japanese covers commands,
 dialogs, panels and keyboard shortcuts. Command search accepts the translated label, the
 English label and the stable command id; filenames, PDF contents, author names, custom
 action names and error details from the engine or the operating system keep their own text.
