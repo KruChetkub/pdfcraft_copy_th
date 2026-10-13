@@ -1,12 +1,57 @@
+# Temporary & backup files
 *~
-plan/
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Build artifacts & distribution
 /target
 /dist
-/corpus
-/log
-.DS_Store
 /fuzz-out
+*.exe
+*.dll
+*.so
+*.dylib
+*.msi
+*.wixpdb
+
+# Logs & diagnostic dumps
+/log
+*.log
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Environment variables, credentials & private keys
+.env
+.env.*
+*.env
+*.pem
+*.p12
+*.pfx
+secrets/
+
+# Application runtime & portable data
+PdfCraftData/
+*.ron
+
+# Models & external assets
 /assets/models
+/models/
+/corpus
 # A craft-fonts checkout used as the optional CRAFT_FONTS_DIR build input (CI and releases put it here).
 /craft-fonts
+
+# Local observation notes & knowledge graphs
+plan/
 /graphify-out
+
+# Local test documents (loose PDFs in root directory)
+/*.pdf
