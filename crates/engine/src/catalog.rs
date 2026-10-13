@@ -519,6 +519,7 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
         sections: &[ToolSection {
             title: "Bring your own model (off by default)",
             items: &[
+                item("Extract text from images (AI)", "scan-text", "ai.ocr", Ready),
                 item("Summarize", "sparkles", "ai.summary", Provider),
                 item("Ask about this document", "message-circle-reply", "ai.ask", Provider),
                 item("Translate", "languages", "ai.translate", Provider),

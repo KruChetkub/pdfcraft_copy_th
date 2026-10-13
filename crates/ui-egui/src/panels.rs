@@ -28,7 +28,7 @@ pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     );
 }
 
-fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool, bool) {
+pub(crate) fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool, bool) {
     let mut go_back = false;
     let mut close = false;
     ui.horizontal(|ui| {
@@ -157,6 +157,10 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     }
     if g.id == "measure" {
         crate::measure_ui::panel(app, ui, t);
+        return;
+    }
+    if g.id == "ai" {
+        crate::ai_ui::panel(app, ui, t);
         return;
     }
     // Add a stamp: the palette.

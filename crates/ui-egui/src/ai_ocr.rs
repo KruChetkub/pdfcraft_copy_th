@@ -424,6 +424,121 @@ pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) ->
     Ok(words)
 }
 
+/// Query the configured AI model with a text prompt.
+pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (config, system_prompt, user_prompt);
+        return Err("AI features require desktop build".into());
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if config.api_key.trim().is_empty() && config.provider != AiProvider::Custom {
+            return Err("Please enter an API Key in AI settings".into());
+        }
+
+        let agent = http_agent()?;
+        match config.provider {
+            AiProvider::Gemini => {
+                let url = format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                    config.model.trim(),
+                    config.api_key.trim()
+                );
+                let full_prompt = if system_prompt.is_empty() {
+                    user_prompt.to_string()
+                } else {
+                    format!("{system_prompt}\n\n{user_prompt}")
+                };
+                let payload = serde_json::json!({
+                    "contents": [{
+                        "parts": [{"text": full_prompt}]
+                    }]
+                });
+                let mut resp = agent
+                    .post(&url)
+                    .header("Content-Type", "application/json")
+                    .send(payload.to_string().as_bytes())
+                    .map_err(|e| format!("Gemini request failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("Gemini HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Gemini invalid JSON: {e}"))?;
+                Ok(body["candidates"][0]["content"]["parts"][0]["text"]
+                    .as_str()
+                    .unwrap_or("No response text returned.")
+                    .to_string())
+            }
+            AiProvider::OpenAi | AiProvider::Custom => {
+                let url = if config.provider == AiProvider::Custom {
+                    config.custom_endpoint.trim()
+                } else {
+                    "https://api.openai.com/v1/chat/completions"
+                };
+                let mut messages = Vec::new();
+                if !system_prompt.is_empty() {
+                    messages.push(serde_json::json!({"role": "system", "content": system_prompt}));
+                }
+                messages.push(serde_json::json!({"role": "user", "content": user_prompt}));
+
+                let payload = serde_json::json!({
+                    "model": config.model.trim(),
+                    "messages": messages,
+                });
+                let mut req = agent.post(url).header("Content-Type", "application/json");
+                if !config.api_key.trim().is_empty() {
+                    req = req.header("Authorization", &format!("Bearer {}", config.api_key.trim()));
+                }
+                let mut resp = req.send(payload.to_string().as_bytes()).map_err(|e| format!("AI request failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("AI HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Invalid JSON: {e}"))?;
+                Ok(body["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("No response content returned.")
+                    .to_string())
+            }
+            AiProvider::Anthropic => {
+                let url = "https://api.anthropic.com/v1/messages";
+                let mut payload_map = serde_json::Map::new();
+                payload_map.insert("model".into(), serde_json::json!(config.model.trim()));
+                payload_map.insert("max_tokens".into(), serde_json::json!(4096));
+                if !system_prompt.is_empty() {
+                    payload_map.insert("system".into(), serde_json::json!(system_prompt));
+                }
+                payload_map.insert("messages".into(), serde_json::json!([
+                    {"role": "user", "content": user_prompt}
+                ]));
+
+                let payload = serde_json::Value::Object(payload_map);
+                let mut resp = agent
+                    .post(url)
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", config.api_key.trim())
+                    .header("anthropic-version", "2023-06-01")
+                    .send(payload.to_string().as_bytes())
+                    .map_err(|e| format!("Claude request failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("Claude HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Claude invalid JSON: {e}"))?;
+                Ok(body["content"][0]["text"]
+                    .as_str()
+                    .unwrap_or("No response text returned.")
+                    .to_string())
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

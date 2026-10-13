@@ -371,6 +371,11 @@ impl PdfCraftApp {
             "export.text" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Text)),
             "a11y.check" => self.start_accessibility_check(),
             "ocr.recognize" => self.dialog = Some(Dialog::RecognizeText),
+            "ai.ocr" | "ai.summary" | "ai.ask" | "ai.translate" => {
+                self.left = crate::LeftPanel::Tool("ai");
+                self.left_open = true;
+                self.reveal_tools();
+            }
             "tools.js_console" => self.dialog = Some(Dialog::JsConsole),
             "tools.document_js" => {
                 self.doc_js = Default::default();

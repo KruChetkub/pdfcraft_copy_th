@@ -51,6 +51,7 @@ mod js_ui;
 mod marks_ui;
 mod measure_ui;
 pub mod ai_ocr;
+pub mod ai_ui;
 mod ocr_ui;
 mod optimize_ui;
 mod search_ui;
@@ -587,6 +588,7 @@ pub struct PdfCraftApp {
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
     /// AI Vision OCR configuration and test status.
     pub ai_config: ai_ocr::AiConfig,
+    pub ai_ui_state: ai_ui::AiUiState,
     pub ai_test_status: Option<Result<String, String>>,
     pub ai_testing: bool,
     pub ai_test_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
@@ -886,6 +888,7 @@ impl PdfCraftApp {
             ocr_run: None,
             ocr_batch: None,
             ai_config: ai_ocr::AiConfig::default(),
+            ai_ui_state: ai_ui::AiUiState::default(),
             ai_test_status: None,
             ai_testing: false,
             ai_test_rx: None,

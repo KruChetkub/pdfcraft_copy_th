@@ -2593,3 +2593,23 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Space
+	Please configure an AI API Key	โปรดระบุหรือตั้งค่า API Key ของ AI
+	Hide settings	ซ่อนการตั้งค่า
+	Configure API Key & Model…	ตั้งค่า API Key และโมเดล AI…
+	AI Provider & Model	ผู้ให้บริการและโมเดล AI
+	Provider:	ผู้ให้บริการ:
+	Scope:	ขอบเขต:
+	Extract text from images (AI OCR)	แปลงข้อความจากภาพด้วย AI (OCR)
+	Extract text from images (AI)	แปลงข้อความจากภาพด้วย AI
+	Extract text from images (AI)…	แปลงข้อความจากภาพด้วย AI…
+	Transcribe Thai & English from images into accurate, copyable text layer	สกัดข้อความภาษาไทยและอังกฤษจากภาพ แปลงเป็นเลเยอร์ข้อความที่ค้นหาและคัดลอกได้
+	Start AI Text Extraction	เริ่มแปลงข้อความจากภาพด้วย AI
+	Document Intelligence	ความสามารถอัจฉริยะของ AI
+	Summarize document content in Thai	สรุปเนื้อหาเอกสารเป็นภาษาไทย
+	Translate document text to Thai	แปลข้อความเอกสารเป็นภาษาไทย
+	Type a question about this document…	พิมพ์คำถามเกี่ยวกับเอกสารนี้…
+	Ask AI	ถาม AI
+	AI Response	คำตอบจาก AI
+	Please enter your API Key in AI settings first	โปรดกรอก API Key ในการตั้งค่า AI ก่อนใช้งาน
+	Please enter a question	โปรดระบุคำถาม
+	No text found. Run 'Extract text from images (AI OCR)' first.	ไม่พบข้อความในเอกสาร โปรดเรียกใช้ 'แปลงข้อความจากภาพด้วย AI' ก่อน
