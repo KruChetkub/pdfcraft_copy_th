@@ -98,12 +98,13 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     });
     group(ui, "Settings", &mut |ui| {
         egui::Grid::new("ocr-settings").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-            ui.label(tl!("Engine"));
+            ui.label(if crate::i18n::current().code() == "th" { "เครื่องมือ (Engine)" } else { "Engine" });
             let ai_provider_name = app.ai_config.provider.display_name();
             let ai_label = format!("AI Vision ({ai_provider_name})");
-            let engine_label = if d.use_ai { ai_label.clone() } else { tl!("Local (ocrs)").to_string() };
+            let local_label = if crate::i18n::current().code() == "th" { "บนเครื่อง (ocrs)" } else { "Local (ocrs)" };
+            let engine_label = if d.use_ai { ai_label.clone() } else { local_label.to_string() };
             egui::ComboBox::from_id_salt("ocr-engine").selected_text(engine_label).width(220.0).show_ui(ui, |ui| {
-                if ui.selectable_label(!d.use_ai, tl!("Local (ocrs)")).clicked() {
+                if ui.selectable_label(!d.use_ai, local_label).clicked() {
                     d.use_ai = false;
                     ui.close();
                 }
@@ -144,8 +145,13 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     let can_run = if d.use_ai { ai_ready } else { available };
 
     if d.use_ai && !ai_ready {
+        let msg = if crate::i18n::current().code() == "th" {
+            "ยังไม่ได้ตั้งค่า AI Vision OCR โปรดระบุ API Key ของคุณใน การตั้งค่า ▸ AI Vision OCR"
+        } else {
+            "AI Vision OCR is not configured. Please set your API key in Preferences ▸ AI Vision OCR."
+        };
         ui.label(
-            egui::RichText::new(tl!("AI Vision OCR is not configured. Please set your API key in Preferences ▸ AI Vision OCR."))
+            egui::RichText::new(msg)
                 .small()
                 .color(t.text_muted),
         );

@@ -231,6 +231,8 @@ pub enum QuickTool {
     /// Edit ▸ Column Select: drag a rectangle to select only the text inside it (#740). The
     /// Select tool does the same while Alt/Option is held at the start of a drag.
     ColumnSelect,
+    /// AI Assistant: drag a rectangle to extract text from that specific area.
+    AiSelect,
 }
 
 /// A file dropped on a page grid: its name, and its bytes or, for a file on disk, the path they are
@@ -2184,6 +2186,7 @@ impl PdfCraftApp {
                     "sign" => QuickTool::SignArea { certify: false },
                     "marquee-zoom" => QuickTool::MarqueeZoom,
                     "snapshot" => QuickTool::Snapshot,
+                    "ai-select" => QuickTool::AiSelect,
                     "column-select" => QuickTool::ColumnSelect,
                     "certify" => QuickTool::SignArea { certify: true },
                     custom if custom.starts_with("custom-stamp-") => {

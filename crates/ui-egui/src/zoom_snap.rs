@@ -74,6 +74,12 @@ impl PdfCraftApp {
                     Err(e) => self.notify_fmt("Couldn't take the snapshot: {e}", &[("e", &e.to_string())]),
                 }
             }
+            QuickTool::AiSelect => {
+                if view_rect[2] - view_rect[0] < 2.0 || view_rect[3] - view_rect[1] < 2.0 {
+                    return;
+                }
+                self.ai_extract_area(index, page, view_rect);
+            }
             _ => {}
         }
     }
@@ -145,6 +151,75 @@ impl PdfCraftApp {
         }
         self.last_snapshot = Some((w, h, out.rgba));
         Ok((w, h))
+    }
+
+    /// Extract text from the selected area on `page` using AI Vision OCR.
+    pub fn ai_extract_area(&mut self, index: usize, page: usize, view_rect: [f32; 4]) {
+        let view = match self.views.get(index) {
+            Some(v) => v,
+            None => return,
+        };
+        let doc = match self.session.get(view.id) {
+            Some(d) => d,
+            None => return,
+        };
+        let ppp = self.ctx.as_ref().map_or(2.0, |c| c.pixels_per_point());
+        let scale = (view.zoom * ppp).clamp(1.5, 4.0);
+        let tile = Tile {
+            x: (view_rect[0] * scale).floor().max(0.0) as u32,
+            y: (view_rect[1] * scale).floor().max(0.0) as u32,
+            w: ((view_rect[2] - view_rect[0]) * scale).ceil().max(1.0) as u32,
+            h: ((view_rect[3] - view_rect[1]) * scale).ceil().max(1.0) as u32,
+        };
+        if (tile.w as u64) * (tile.h as u64) > 64_000_000 {
+            self.notify_tr("The selected area is too large");
+            return;
+        }
+        let config = RenderConfig {
+            password: doc.password.as_deref().map(std::sync::Arc::from),
+            ..RenderConfig::default()
+        };
+        let mut r = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), config);
+        let out = r.render(RenderRequest {
+            page,
+            kind: RequestKind::Pixels,
+            tile: Some(tile),
+            scale,
+            tag: 0,
+            preview: false,
+        });
+        if let Some(e) = out.error {
+            self.notify_fmt("Render error: {e}", &[("e", &e)]);
+            return;
+        }
+
+        if self.ai_config.api_key.trim().is_empty() && self.ai_config.provider != crate::ai_ocr::AiProvider::Custom {
+            self.ai_ui_state.show_settings = true;
+            self.left = crate::LeftPanel::Tool("ai");
+            self.left_open = true;
+            self.notify_tr("Please enter your API Key in AI settings first");
+            return;
+        }
+
+        let cfg = self.ai_config.clone();
+        let w = out.width as usize;
+        let h = out.height as usize;
+        let rgba = out.rgba;
+        let res_arc = std::sync::Arc::new(std::sync::Mutex::new(None));
+        self.ai_ui_state.async_result = Some(res_arc.clone());
+        self.ai_ui_state.is_working = true;
+        self.ai_ui_state.task_name = Some(if crate::i18n::current().code() == "th" { "สกัดข้อความจากพื้นที่ที่เลือก" } else { "Selected area text extraction" }.to_string());
+        self.left = crate::LeftPanel::Tool("ai");
+        self.left_open = true;
+        self.notify(if crate::i18n::current().code() == "th" { "กำลังสกัดข้อความจากพื้นที่ที่เลือกด้วย AI…" } else { "Extracting text from selected area with AI…" });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(move || {
+            let res = crate::ai_ocr::transcribe_image_with_ai(&cfg, &rgba, w, h);
+            if let Ok(mut lock) = res_arc.lock() {
+                *lock = Some(res);
+            }
+        });
     }
 }
 

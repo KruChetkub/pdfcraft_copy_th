@@ -346,6 +346,147 @@ Do not wrap in markdown code fences, return pure JSON.";
     }
 }
 
+/// Transcribe a cropped image directly into text using AI Vision.
+pub fn transcribe_image_with_ai(config: &AiConfig, rgba: &[u8], width: usize, height: usize) -> Result<String, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (config, rgba, width, height);
+        return Err("AI Vision requires desktop build".into());
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use base64::Engine;
+        let png_bytes = encode_rgba_to_png(rgba, width as u32, height as u32)?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+        let agent = http_agent()?;
+
+        let prompt = "You are an ultra-high precision OCR engine. Transcribe ALL text in this cropped document image with 100% exact fidelity. \
+CRITICAL RULES FOR THAI & MULTILINGUAL ACCURACY: \
+1. Exact Thai Script: Preserve all Thai consonants, upper/lower vowels (ิ, ี, ึ, ื, ุ, ู, ั, ็), and tone marks/diacritics (่, ้, ๊, ๋, ์) with zero omissions or misplacements. \
+2. Thai Numerals: Preserve all Thai numerals (๑, ๒, ๓, ๔, ๕, ๖, ๗, ๘, ๙, ๐) exactly as printed. Never convert Thai numerals to Arabic digits. \
+3. English & Symbols: Preserve exact mixed English words, acronyms, and parenthetical expressions (e.g. (Gap), (Megatrends)), bullet numbers, punctuation, colons, and hyphens. \
+Output ONLY the clean, exact transcribed text in natural reading order without any commentary or markdown code fences.";
+
+        match config.provider {
+            AiProvider::Gemini => {
+                let url = format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                    config.model.trim(),
+                    config.api_key.trim()
+                );
+                let payload = serde_json::json!({
+                    "contents": [{
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/png",
+                                    "data": b64
+                                }
+                            }
+                        ]
+                    }]
+                });
+                let mut resp = agent
+                    .post(&url)
+                    .header("Content-Type", "application/json")
+                    .send(payload.to_string().as_bytes())
+                    .map_err(|e| format!("Gemini Vision OCR failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("Gemini HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Gemini invalid JSON response: {e}"))?;
+                Ok(body["candidates"][0]["content"]["parts"][0]["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string())
+            }
+            AiProvider::OpenAi | AiProvider::Custom => {
+                let url = if config.provider == AiProvider::Custom {
+                    config.custom_endpoint.trim()
+                } else {
+                    "https://api.openai.com/v1/chat/completions"
+                };
+                let payload = serde_json::json!({
+                    "model": config.model.trim(),
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": format!("data:image/png;base64,{b64}")
+                                }
+                            }
+                        ]
+                    }],
+                    "max_tokens": 4096
+                });
+                let mut req = agent.post(url).header("Content-Type", "application/json");
+                if !config.api_key.trim().is_empty() {
+                    req = req.header("Authorization", &format!("Bearer {}", config.api_key.trim()));
+                }
+                let mut resp = req.send(payload.to_string().as_bytes()).map_err(|e| format!("AI Vision request failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("AI HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Invalid JSON response: {e}"))?;
+                Ok(body["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string())
+            }
+            AiProvider::Anthropic => {
+                let url = "https://api.anthropic.com/v1/messages";
+                let payload = serde_json::json!({
+                    "model": config.model.trim(),
+                    "max_tokens": 4096,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": b64
+                                }
+                            },
+                            {"type": "text", "text": prompt}
+                        ]
+                    }]
+                });
+                let mut resp = agent
+                    .post(url)
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", config.api_key.trim())
+                    .header("anthropic-version", "2023-06-01")
+                    .send(payload.to_string().as_bytes())
+                    .map_err(|e| format!("Claude Vision OCR failed: {e}"))?;
+                if resp.status().as_u16() != 200 {
+                    let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
+                    return Err(format!("Claude HTTP {}: {err}", resp.status().as_u16()));
+                }
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
+                    .map_err(|e| format!("Claude invalid JSON response: {e}"))?;
+                Ok(body["content"][0]["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string())
+            }
+        }
+    }
+}
+
 /// Parses the AI's OCR JSON response into PlacedWords in PDF user space.
 pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) -> Result<Vec<PlacedWord>, String> {
     let clean = json_text

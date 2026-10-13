@@ -2290,7 +2290,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         | QuickTool::Link
         | QuickTool::SignArea { .. }
         | QuickTool::MarqueeZoom
-        | QuickTool::Snapshot => false,
+        | QuickTool::Snapshot
+        | QuickTool::AiSelect => false,
     };
     let prefs = &app.comment_prefs;
     let units = app.units;
@@ -2634,7 +2635,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             if matches!(tool, QuickTool::SignArea { .. }) {
                 crate::sign_ui::page_input(ui, &resp, &xf, i, info, view);
             }
-            if matches!(tool, QuickTool::MarqueeZoom | QuickTool::Snapshot) {
+            if matches!(tool, QuickTool::MarqueeZoom | QuickTool::Snapshot | QuickTool::AiSelect) {
                 crate::zoom_snap::page_input(ui, &resp, &xf, i, view);
             }
             if tool == QuickTool::EnhanceCamera {

@@ -509,12 +509,30 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
     }
 
     use crate::ai_ocr::AiProvider;
-    ui.label(egui::RichText::new(tl!("AI Vision OCR")).font(theme::semibold(13.0)));
+    let ai_tr = |s: &'static str| -> &'static str {
+        if crate::i18n::current().code() == "th" {
+            match s {
+                "AI Vision OCR" => "AI Vision OCR (แปลงข้อความด้วย AI)",
+                "Enable AI Vision OCR" => "เปิดใช้งาน AI Vision OCR",
+                "Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text." => "สกัดข้อความจากภาพด้วยโมเดล AI Vision เพื่อความแม่นยำ 100% สำหรับภาษาไทยและหลายภาษา",
+                "Provider" => "ผู้ให้บริการ",
+                "Model" => "โมเดล",
+                "Custom Model" => "โมเดลที่กำหนดเอง",
+                "Endpoint URL" => "Endpoint URL",
+                "Test Connection" => "ทดสอบการเชื่อมต่อ",
+                "Connecting…" => "กำลังเชื่อมต่อ…",
+                _ => crate::i18n::t(s),
+            }
+        } else {
+            crate::i18n::t(s)
+        }
+    };
+    ui.label(egui::RichText::new(ai_tr("AI Vision OCR")).font(theme::semibold(13.0)));
     egui::Frame::new().fill(t.hover).corner_radius(egui::CornerRadius::same(6)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.add(widgets::checkbox(&mut app.ai_config.enabled, tl!("Enable AI Vision OCR")));
+        ui.add(widgets::checkbox(&mut app.ai_config.enabled, ai_tr("Enable AI Vision OCR")));
         ui.label(
-            egui::RichText::new(tl!("Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text."))
+            egui::RichText::new(ai_tr("Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text."))
                 .small()
                 .color(t.text_muted),
         );
@@ -524,7 +542,7 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         ui.add_space(6.0);
 
         ui.horizontal(|ui| {
-            ui.label(tl!("Provider"));
+            ui.label(ai_tr("Provider"));
             let current_provider = app.ai_config.provider;
             egui::ComboBox::from_id_salt("ai-provider")
                 .selected_text(current_provider.display_name())
@@ -544,12 +562,12 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         // Display provider name explicitly when showing API Key label as requested by user
         let provider_name = app.ai_config.provider.display_name();
         ui.horizontal(|ui| {
-            let label = ui.label(format!("{}:", crate::i18n::fmt(tl!("API Key ({provider})"), &[("provider", provider_name)])));
+            let label = ui.label(format!("API Key ({provider_name}):"));
             ui.add(egui::TextEdit::singleline(&mut app.ai_config.api_key).password(true).desired_width(260.0)).labelled_by(label.id);
         });
 
         ui.horizontal(|ui| {
-            ui.label(tl!("Model"));
+            ui.label(ai_tr("Model"));
             let presets = app.ai_config.provider.presets();
             egui::ComboBox::from_id_salt("ai-model")
                 .selected_text(&app.ai_config.model)
@@ -564,20 +582,20 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
                 });
         });
         ui.horizontal(|ui| {
-            let label = ui.label(tl!("Custom Model"));
+            let label = ui.label(ai_tr("Custom Model"));
             ui.add(egui::TextEdit::singleline(&mut app.ai_config.model).desired_width(220.0)).labelled_by(label.id);
         });
 
         if app.ai_config.provider == AiProvider::Custom {
             ui.horizontal(|ui| {
-                let label = ui.label(tl!("Endpoint URL"));
+                let label = ui.label(ai_tr("Endpoint URL"));
                 ui.add(egui::TextEdit::singleline(&mut app.ai_config.custom_endpoint).desired_width(260.0)).labelled_by(label.id);
             });
         }
 
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            if widgets::pill_button(ui, tl!("Test Connection"), false).clicked() {
+            if widgets::pill_button(ui, ai_tr("Test Connection"), false).clicked() {
                 let config = app.ai_config.clone();
                 let (tx, rx) = std::sync::mpsc::channel();
                 let ctx = ui.ctx().clone();
@@ -593,7 +611,7 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
 
             if app.ai_testing {
                 ui.spinner();
-                ui.label(tl!("Connecting…"));
+                ui.label(ai_tr("Connecting…"));
             } else if let Some(ref status) = app.ai_test_status {
                 match status {
                     Ok(msg) => {
