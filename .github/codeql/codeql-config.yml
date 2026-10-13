@@ -1,0 +1,15 @@
+name: "PdfCraft CodeQL Configuration"
+
+# Exclude third-party vendor directories, test files, and fuzzing directories
+paths-ignore:
+  - "vendor/**"
+  - "**/tests/**"
+  - "**/test/**"
+  - "fuzz/**"
+
+# Filter out false positives for hardcoded crypto values.
+# In PDF standards (ISO 32000-2) and test suites, fixed specification constants,
+# padding sequences, and test passwords/keys are expected and required.
+query-filters:
+  - exclude:
+      id: rust/hard-coded-cryptographic-value
