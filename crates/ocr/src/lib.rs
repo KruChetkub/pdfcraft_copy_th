@@ -201,7 +201,7 @@ fn ink_extent(text: &str) -> (f64, f64) {
     let tall = text
         .chars()
         .any(|c| c.is_uppercase() || c.is_ascii_digit() || "bdfhijklt!?/\\()[]{}|'\"#$%&@".contains(c) || (c.is_alphabetic() && !c.is_ascii()));
-    let low = text.chars().any(|c| "gjpqy()[]{}|_".contains(c));
+    let low = text.chars().any(|c| "gjpqy()[]{}|_".contains(c) || "\u{0E0E}\u{0E0F}\u{0E10}\u{0E24}\u{0E26}\u{0E38}\u{0E39}\u{0E3A}".contains(c));
     (if tall { CAP_HEIGHT } else { X_HEIGHT }, if low { -DESCENT } else { 0.0 })
 }
 

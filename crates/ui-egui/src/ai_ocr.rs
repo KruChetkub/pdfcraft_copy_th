@@ -225,12 +225,16 @@ pub fn recognize_page_with_ai(
         let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
         let agent = http_agent()?;
 
-        let system_prompt = "You are a high-precision OCR and document transcription engine. \
-Transcribe all text in this document image with 100% exact fidelity in both Thai and English. \
-Do not miss any words, tone marks, or diacritics. \
-Return ONLY a valid JSON array of objects, where each object has: \
-\"box\": [ymin, xmin, ymax, xmax] (normalized integers from 0 to 1000, where 0,0 is top-left and 1000,1000 is bottom-right) \
-and \"text\": \"word or line segment\". \
+        let system_prompt = "You are an ultra-high precision OCR and document transcription engine. \
+Transcribe ALL text in this document image with 100% exact fidelity in natural reading order (top to bottom). \
+CRITICAL RULES FOR THAI & MULTILINGUAL ACCURACY: \
+1. Exact Thai Script: Preserve all Thai consonants, upper/lower vowels (ิ, ี, ึ, ื, ุ, ู, ั, ็), and tone marks/diacritics (่, ้, ๊, ๋, ์) with zero omissions or misplacements. \
+2. Thai Numerals: Preserve all Thai numerals (๑, ๒, ๓, ๔, ๕, ๖, ๗, ๘, ๙, ๐) exactly as printed. Never convert Thai numerals to Arabic digits. \
+3. English & Symbols: Preserve exact mixed English words, acronyms, and parenthetical expressions (e.g. (Gap), (Megatrends)), bullet numbers, punctuation, colons, and hyphens. \
+4. Completeness: Transcribe every line from header to footer without skipping any clauses. \
+5. Return format: Return ONLY a valid JSON array of objects, where each object has: \
+   \"box\": [ymin, xmin, ymax, xmax] (normalized integers from 0 to 1000, where 0,0 is top-left and 1000,1000 is bottom-right) \
+   and \"text\": \"word or line segment\". \
 Do not wrap in markdown code fences, return pure JSON.";
 
         let json_text = match config.provider {
@@ -395,14 +399,17 @@ pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) ->
         let width = (right - left).max(1.0);
         let height = (top - bottom).max(1.0);
 
-        // If the segment has spaces, split into separate PlacedWords along the horizontal span
+        // If the segment has spaces, split into separate PlacedWords with appropriate word gaps
         let sub_words: Vec<&str> = text.split_whitespace().collect();
         if sub_words.len() > 1 {
+            let num_spaces = (sub_words.len() - 1) as f64;
             let total_chars: usize = sub_words.iter().map(|w| w.chars().count()).sum();
+            let effective_units = total_chars as f64 + num_spaces * 0.6;
+            let unit_w = width / effective_units.max(1.0);
+            let space_w = unit_w * 0.6;
             let mut curr_x = left;
-            for sw in sub_words {
-                let char_ratio = sw.chars().count() as f64 / total_chars.max(1) as f64;
-                let word_w = width * char_ratio;
+            for (i, sw) in sub_words.iter().enumerate() {
+                let word_w = unit_w * (sw.chars().count() as f64);
                 words.push(PlacedWord {
                     text: sw.to_string(),
                     origin: [curr_x, bottom],
@@ -410,6 +417,9 @@ pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) ->
                     up: [0.0, height],
                 });
                 curr_x += word_w;
+                if i < sub_words.len() - 1 {
+                    curr_x += space_w;
+                }
             }
         } else {
             words.push(PlacedWord {
