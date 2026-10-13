@@ -280,6 +280,35 @@ fn add_resources(doc: &mut Document, page: &pdfcraft_model::Page, opacity: Optio
         font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
         fonts.set(name.to_vec(), Object::Dict(font));
     }
+    if content.is_some_and(|c| c.windows(6).any(|w| w == b"/PCUni")) {
+        let cmap = b"/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /PCUni def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+        let mut cmap_dict = Dict::new();
+        cmap_dict.set(b"Length".to_vec(), Object::Int(cmap.len() as i64));
+        let cmap_ref = doc.add(Object::Stream(pdfcraft_cos::Stream::from_raw(cmap_dict, cmap.to_vec())));
+
+        let mut cid_sys = Dict::new();
+        cid_sys.set(b"Registry".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Adobe".to_vec())));
+        cid_sys.set(b"Ordering".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Identity".to_vec())));
+        cid_sys.set(b"Supplement".to_vec(), Object::Int(0));
+
+        let mut cid_font = Dict::new();
+        cid_font.set(b"Type".to_vec(), Object::name("Font"));
+        cid_font.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+        cid_font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+        cid_font.set(b"CIDSystemInfo".to_vec(), Object::Dict(cid_sys));
+        cid_font.set(b"DW".to_vec(), Object::Int(1000));
+        let cid_ref = doc.add(Object::Dict(cid_font));
+
+        let mut t0 = Dict::new();
+        t0.set(b"Type".to_vec(), Object::name("Font"));
+        t0.set(b"Subtype".to_vec(), Object::name("Type0"));
+        t0.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+        t0.set(b"Encoding".to_vec(), Object::name("Identity-H"));
+        t0.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Ref(cid_ref)]));
+        t0.set(b"ToUnicode".to_vec(), Object::Ref(cmap_ref));
+
+        fonts.set(b"PCUni".to_vec(), Object::Dict(t0));
+    }
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     if let Some(o) = opacity {
         let mut gs = res.get(b"ExtGState").map(|g| doc.resolve(g)).and_then(|g| g.as_dict().cloned()).unwrap_or_default();

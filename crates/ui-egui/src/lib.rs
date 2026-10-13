@@ -50,6 +50,7 @@ mod export_ui;
 mod js_ui;
 mod marks_ui;
 mod measure_ui;
+pub mod ai_ocr;
 mod ocr_ui;
 mod optimize_ui;
 mod search_ui;
@@ -584,6 +585,11 @@ pub struct PdfCraftApp {
     pub ocr_draft: ocr_ui::OcrDraft,
     pub ocr_run: Option<ocr_ui::OcrRun>,
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
+    /// AI Vision OCR configuration and test status.
+    pub ai_config: ai_ocr::AiConfig,
+    pub ai_test_status: Option<Result<String, String>>,
+    pub ai_testing: bool,
+    pub ai_test_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
     pub run_inline: bool,
     /// Action Wizard: the user's actions, the dialog state, the running action and (tests) the
@@ -879,6 +885,10 @@ impl PdfCraftApp {
             ocr_draft: ocr_ui::OcrDraft::default(),
             ocr_run: None,
             ocr_batch: None,
+            ai_config: ai_ocr::AiConfig::default(),
+            ai_test_status: None,
+            ai_testing: false,
+            ai_test_rx: None,
             run_inline: false,
             custom_actions: Vec::new(),
             wizard: Default::default(),
@@ -1802,6 +1812,7 @@ impl PdfCraftApp {
             "combine_view": self.combine_view.as_str(),
             "combine_zoom": self.combine_zoom,
             "comments_panel_closed": self.comments_panel_closed,
+            "ai_config": self.ai_config,
         })
         .to_string()
     }
@@ -1949,6 +1960,9 @@ impl PdfCraftApp {
         if let Ok(pems) = serde_json::from_value::<Vec<String>>(v["trusted"].clone()) {
             let certs = pems.iter().filter_map(|p| pdfcraft_engine::sign::x509::load_certificates(p.as_bytes()).ok()).flatten().collect();
             self.session.set_trusted_certificates(certs);
+        }
+        if let Ok(cfg) = serde_json::from_value::<ai_ocr::AiConfig>(v["ai_config"].clone()) {
+            self.ai_config = cfg;
         }
     }
 

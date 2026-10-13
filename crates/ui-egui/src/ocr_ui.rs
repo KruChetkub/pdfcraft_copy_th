@@ -30,11 +30,13 @@ pub struct OcrDraft {
     pub dpi: u32,
     /// Also recognize pages that already have text (pictures on them; their text isn't added again).
     pub text_pages: bool,
+    /// Use AI Vision OCR instead of local engine.
+    pub use_ai: bool,
 }
 
 impl Default for OcrDraft {
     fn default() -> Self {
-        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: "en".into(), dpi: 300, text_pages: false }
+        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: "en".into(), dpi: 300, text_pages: false, use_ai: false }
     }
 }
 
@@ -96,6 +98,21 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     });
     group(ui, "Settings", &mut |ui| {
         egui::Grid::new("ocr-settings").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+            ui.label(tl!("Engine"));
+            let ai_provider_name = app.ai_config.provider.display_name();
+            let ai_label = format!("AI Vision ({ai_provider_name})");
+            let engine_label = if d.use_ai { ai_label.clone() } else { tl!("Local (ocrs)").to_string() };
+            egui::ComboBox::from_id_salt("ocr-engine").selected_text(engine_label).width(220.0).show_ui(ui, |ui| {
+                if ui.selectable_label(!d.use_ai, tl!("Local (ocrs)")).clicked() {
+                    d.use_ai = false;
+                    ui.close();
+                }
+                if ui.selectable_label(d.use_ai, &ai_label).clicked() {
+                    d.use_ai = true;
+                    ui.close();
+                }
+            });
+            ui.end_row();
             ui.label(tl!("Document language"));
             let name = LANGUAGES.iter().find(|l| l.0 == d.language).map_or("English", |l| l.1);
             egui::ComboBox::from_id_salt("ocr-language").selected_text(tl!(name)).width(220.0).show_ui(ui, |ui| {
@@ -123,7 +140,17 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         ui.add(crate::widgets::checkbox(&mut d.text_pages, tl!("Also recognize pages that already have text")))
             .on_hover_text(tl!("Pictures on those pages are recognized too; words already in the page's text are not added again"));
     });
-    if !available {
+    let ai_ready = app.ai_config.enabled && (!app.ai_config.api_key.trim().is_empty() || app.ai_config.provider == crate::ai_ocr::AiProvider::Custom);
+    let can_run = if d.use_ai { ai_ready } else { available };
+
+    if d.use_ai && !ai_ready {
+        ui.label(
+            egui::RichText::new(tl!("AI Vision OCR is not configured. Please set your API key in Preferences ▸ AI Vision OCR."))
+                .small()
+                .color(t.text_muted),
+        );
+        ui.add_space(6.0);
+    } else if !d.use_ai && !available {
         ui.label(
             egui::RichText::new(tl!("Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them."))
                 .small()
@@ -135,7 +162,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     let (mut go, mut cancel) = (false, false);
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.add_enabled_ui(available, |ui| widgets::pill_button(ui, tl!("Recognize text"), true)).inner.clicked() {
+            if ui.add_enabled_ui(can_run, |ui| widgets::pill_button(ui, tl!("Recognize text"), true)).inner.clicked() {
                 go = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -165,18 +192,34 @@ impl PdfCraftApp {
             OcrPages::Range => (d.from.saturating_sub(1)..d.to).collect(),
         };
         let settings = d.settings();
+        let use_ai = d.use_ai;
+        let ai_config = self.ai_config.clone();
         let Some(job) = self.session.ocr_job(id, &pages, settings) else { return };
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
-            let result = pdfcraft_engine::ocr::engine().map(|ocr| {
-                job.run(&ocr, |done, total| {
-                    let Ok(mut s) = p.lock() else { return false };
-                    s.done = done;
-                    s.total = total;
-                    !s.cancel
+            let result = if use_ai {
+                Ok(job.run_with(
+                    |rgba, w, h, pw, ph| {
+                        crate::ai_ocr::recognize_page_with_ai(&ai_config, rgba, w, h, pw, ph)
+                    },
+                    |done, total| {
+                        let Ok(mut s) = p.lock() else { return false };
+                        s.done = done;
+                        s.total = total;
+                        !s.cancel
+                    },
+                ))
+            } else {
+                pdfcraft_engine::ocr::engine().map(|ocr| {
+                    job.run(&ocr, |done, total| {
+                        let Ok(mut s) = p.lock() else { return false };
+                        s.done = done;
+                        s.total = total;
+                        !s.cancel
+                    })
                 })
-            });
+            };
             if let Ok(mut s) = p.lock() {
                 s.result = Some(result);
             }
@@ -202,20 +245,29 @@ impl PdfCraftApp {
         }
         // The settings showing now, not when the folder arrives.
         let settings = self.ocr_draft.settings();
+        let use_ai = self.ocr_draft.use_ai;
+        let ai_config = self.ai_config.clone();
         #[cfg(not(target_arch = "wasm32"))]
         match self.export_dir_override.clone() {
-            Some(d) => self.ocr_files_into(files, settings, d.into()),
+            Some(d) => self.ocr_files_into(files, settings, use_ai, ai_config, d.into()),
             None => {
                 let dialog = rfd::AsyncFileDialog::new().set_title(tl!("Choose a folder for the searchable files").to_string());
-                self.ask_one(crate::pickers::Ask::Folder(dialog), None, move |app, dir| app.ocr_files_into(files, settings, dir));
+                self.ask_one(crate::pickers::Ask::Folder(dialog), None, move |app, dir| app.ocr_files_into(files, settings, use_ai, ai_config, dir));
             }
         }
         #[cfg(target_arch = "wasm32")]
-        self.ocr_files_into(files, settings);
+        self.ocr_files_into(files, settings, use_ai, ai_config);
     }
 
     /// [`Self::ocr_files`] once the folder for the searchable files is known.
-    fn ocr_files_into(&mut self, files: Vec<(String, Vec<u8>)>, settings: OcrSettings, #[cfg(not(target_arch = "wasm32"))] dir: std::path::PathBuf) {
+    fn ocr_files_into(
+        &mut self,
+        files: Vec<(String, Vec<u8>)>,
+        settings: OcrSettings,
+        use_ai: bool,
+        ai_config: crate::ai_ocr::AiConfig,
+        #[cfg(not(target_arch = "wasm32"))] dir: std::path::PathBuf,
+    ) {
         // Another batch may have started while the folder picker was open.
         if self.ocr_batch.is_some() {
             self.notify_tr("Text recognition is already running");
@@ -228,27 +280,58 @@ impl PdfCraftApp {
         let work = move || {
             crate::i18n::set_current(lang);
             let (mut ok, mut words, mut failed) = (0, 0, Vec::new());
-            match pdfcraft_engine::ocr::engine() {
-                Err(e) => failed.push(e),
-                Ok(ocr) => {
-                    for (i, (name, bytes)) in files.into_iter().enumerate() {
-                        if let Ok(mut s) = p.lock() {
-                            s.done = i;
+            if use_ai {
+                for (i, (name, bytes)) in files.into_iter().enumerate() {
+                    if let Ok(mut s) = p.lock() {
+                        s.done = i;
+                    }
+                    let cfg = ai_config.clone();
+                    let r = pdfcraft_engine::ocr::recognize_file_with(
+                        &name,
+                        Arc::new(bytes),
+                        None,
+                        settings.clone(),
+                        move |rgba, w, h, pw, ph| crate::ai_ocr::recognize_page_with_ai(&cfg, rgba, w, h, pw, ph),
+                        |_, _| true,
+                    );
+                    let saved = r.and_then(|r| {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        crate::editing::write_atomically(&dir.join(&name).to_string_lossy(), &r.bytes).map_err(|e| e.to_string())?;
+                        #[cfg(target_arch = "wasm32")]
+                        crate::editing::download(&name, &r.bytes)?;
+                        Ok(r.words())
+                    });
+                    match saved {
+                        Ok(n) => {
+                            ok += 1;
+                            words += n;
                         }
-                        let r = pdfcraft_engine::ocr::recognize_file(&name, Arc::new(bytes), None, settings.clone(), &ocr, |_, _| true);
-                        let saved = r.and_then(|r| {
-                            #[cfg(not(target_arch = "wasm32"))]
-                            crate::editing::write_atomically(&dir.join(&name).to_string_lossy(), &r.bytes).map_err(|e| e.to_string())?;
-                            #[cfg(target_arch = "wasm32")]
-                            crate::editing::download(&name, &r.bytes)?;
-                            Ok(r.words())
-                        });
-                        match saved {
-                            Ok(n) => {
-                                ok += 1;
-                                words += n;
+                        Err(e) => failed.push(format!("{name}: {}", e)),
+                    }
+                }
+            } else {
+                match pdfcraft_engine::ocr::engine() {
+                    Err(e) => failed.push(e),
+                    Ok(ocr) => {
+                        for (i, (name, bytes)) in files.into_iter().enumerate() {
+                            if let Ok(mut s) = p.lock() {
+                                s.done = i;
                             }
-                            Err(e) => failed.push(format!("{name}: {}", e)),
+                            let r = pdfcraft_engine::ocr::recognize_file(&name, Arc::new(bytes), None, settings.clone(), &ocr, |_, _| true);
+                            let saved = r.and_then(|r| {
+                                #[cfg(not(target_arch = "wasm32"))]
+                                crate::editing::write_atomically(&dir.join(&name).to_string_lossy(), &r.bytes).map_err(|e| e.to_string())?;
+                                #[cfg(target_arch = "wasm32")]
+                                crate::editing::download(&name, &r.bytes)?;
+                                Ok(r.words())
+                            });
+                            match saved {
+                                Ok(n) => {
+                                    ok += 1;
+                                    words += n;
+                                }
+                                Err(e) => failed.push(format!("{name}: {}", e)),
+                            }
                         }
                     }
                 }

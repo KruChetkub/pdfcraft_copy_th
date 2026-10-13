@@ -212,12 +212,27 @@ fn num(v: f64) -> String {
 }
 
 /// Page content that writes `words` as invisible text in `/PCHelv` (standard Helvetica,
-/// WinAnsiEncoding), each word stretched to its box so selection and search highlight the
+/// WinAnsiEncoding) or `/PCUni` (Type0 Identity-H with ToUnicode CMap for Thai and multilingual text),
+/// each word stretched to its box so selection and search highlight the
 /// right place. Marked content `/OCR` so it can be told apart from the page's own text.
 pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
     let mut out = b"/OCR BMC\nBT\n3 Tr\n/PCHelv 1 Tf\n".to_vec();
+    let mut current_is_uni = false;
     for w in words {
-        let width = helvetica_width(&w.text, 1.0);
+        let is_uni = w.text.chars().any(|c| !pdfcraft_fonts::win_ansi_encodable(c));
+        if is_uni && !current_is_uni {
+            out.extend_from_slice(b"/PCUni 1 Tf\n");
+            current_is_uni = true;
+        } else if !is_uni && current_is_uni {
+            out.extend_from_slice(b"/PCHelv 1 Tf\n");
+            current_is_uni = false;
+        }
+
+        let width = if is_uni {
+            (w.text.encode_utf16().count() as f64).max(1.0)
+        } else {
+            helvetica_width(&w.text, 1.0)
+        };
         let height = w.up[0].hypot(w.up[1]);
         if width <= 0.0 || height <= 0.0 {
             continue;
@@ -232,8 +247,16 @@ pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
         let nums: Vec<String> = m.iter().map(|v| num(*v)).collect();
         out.extend_from_slice(nums.join(" ").as_bytes());
         out.extend_from_slice(b" Tm ");
-        out.extend(pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(&w.text)));
-        out.extend_from_slice(b" Tj\n");
+        if is_uni {
+            out.push(b'<');
+            for u in w.text.encode_utf16() {
+                out.extend_from_slice(format!("{u:04X}").as_bytes());
+            }
+            out.extend_from_slice(b"> Tj\n");
+        } else {
+            out.extend(pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(&w.text)));
+            out.extend_from_slice(b" Tj\n");
+        }
     }
     out.extend_from_slice(b"ET\nEMC\n");
     out
@@ -396,5 +419,14 @@ mod tests {
             }
             (w, h, px)
         }
+    }
+
+    #[test]
+    fn thai_text_layer_uses_unicode_font() {
+        let w = PlacedWord { text: "ทดสอบ".into(), origin: [10.0, 20.0], across: [30.0, 0.0], up: [0.0, 10.0] };
+        let layer = text_layer(&[w]);
+        let s = String::from_utf8(layer).unwrap();
+        assert!(s.contains("/PCUni 1 Tf"), "Must use /PCUni font: {s}");
+        assert!(s.contains("0E17"), "Must encode Thai characters in UTF-16 hex: {s}");
     }
 }

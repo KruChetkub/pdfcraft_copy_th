@@ -151,6 +151,51 @@ impl OcrJob {
         progress(total, total);
         out
     }
+
+    /// Read the pages with a custom recognizer function (such as AI Vision OCR).
+    pub fn run_with(
+        self,
+        mut recognize: impl FnMut(&[u8], usize, usize, f64, f64) -> Result<Vec<PlacedWord>, String>,
+        mut progress: impl FnMut(usize, usize) -> bool,
+    ) -> Vec<OcrPage> {
+        let config = RenderConfig { password: self.password.as_deref().map(Arc::from), ..Default::default() };
+        let mut r = PageRenderer::new(self.bytes.clone(), config);
+        let mut out = Vec::new();
+        let total = self.pages.len();
+        for (done, &page) in self.pages.iter().enumerate() {
+            if !progress(done, total) {
+                break;
+            }
+            let Some(info) = self.infos.get(page) else { continue };
+            let skip = |why: &str| OcrPage { page, words: Vec::new(), already_on_page: 0, skipped: Some(why.into()) };
+            let existing: Vec<[f32; 4]> = r
+                .render(RenderRequest { page, kind: RequestKind::Text, scale: 1.0, ..Default::default() })
+                .text
+                .map(|t| t.glyphs.iter().filter(|g| !g.text.trim().is_empty()).map(|g| g.rect).collect())
+                .unwrap_or_default();
+            if self.settings.skip_text_pages && !existing.is_empty() {
+                out.push(skip("the page already contains text"));
+                continue;
+            }
+            let wanted = self.settings.dpi.clamp(72.0, 600.0) / 72.0;
+            let scale = self.native.get(page).copied().flatten().map_or(wanted, |n| n.clamp(1.0, wanted));
+            let shot = r.render(RenderRequest { page, scale, ..Default::default() });
+            if let Some(e) = shot.error {
+                out.push(skip(&e));
+                continue;
+            }
+            let words = match recognize(&shot.rgba, shot.width as usize, shot.height as usize, info.width as f64, info.height as f64) {
+                Ok(w) => w,
+                Err(e) => {
+                    out.push(skip(&e));
+                    continue;
+                }
+            };
+            out.push(OcrPage { page, words, already_on_page: 0, skipped: None });
+        }
+        progress(total, total);
+        out
+    }
 }
 
 impl Session {
@@ -233,6 +278,28 @@ pub fn recognize_file(
     }
     let job = s.ocr_job(id, &[], settings).ok_or("the document could not be read")?;
     let pages = job.run(ocr, progress);
+    if s.apply_ocr(id, &pages).map_err(|e| e.to_string())? == 0 {
+        return Ok(FileResult { bytes, pages });
+    }
+    Ok(FileResult { bytes: s.save_bytes(id).map_err(|e| e.to_string())?, pages })
+}
+
+/// Recognize text in multiple files with a custom recognizer function (such as AI Vision OCR).
+pub fn recognize_file_with(
+    name: &str,
+    bytes: Arc<Vec<u8>>,
+    password: Option<&str>,
+    settings: OcrSettings,
+    recognize: impl FnMut(&[u8], usize, usize, f64, f64) -> Result<Vec<PlacedWord>, String>,
+    progress: impl FnMut(usize, usize) -> bool,
+) -> Result<FileResult, String> {
+    let mut s = Session::new();
+    let id = s.open(name, None, bytes.clone(), password).map_err(|e| e.to_string())?;
+    if let Some(why) = s.get(id).and_then(|d| d.read_only_reason.clone()) {
+        return Err(why);
+    }
+    let job = s.ocr_job(id, &[], settings).ok_or("the document could not be read")?;
+    let pages = job.run_with(recognize, progress);
     if s.apply_ocr(id, &pages).map_err(|e| e.to_string())? == 0 {
         return Ok(FileResult { bytes, pages });
     }

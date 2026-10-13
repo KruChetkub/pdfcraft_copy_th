@@ -484,8 +484,128 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
                 .color(t.text_muted),
         );
     });
+    ui.add_space(8.0);
+    ai_ocr_preferences(ui, app, t);
     ui.add_space(10.0);
     buttons(ui, tl!("OK"), &[]).is_some()
+}
+
+/// Preferences ▸ AI Vision OCR settings (Multi-provider API configuration).
+fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
+    if let Some(rx) = &app.ai_test_rx {
+        match rx.try_recv() {
+            Ok(result) => {
+                app.ai_test_status = Some(result);
+                app.ai_testing = false;
+                app.ai_test_rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                app.ai_test_status = Some(Err("Connection test terminated unexpectedly".into()));
+                app.ai_testing = false;
+                app.ai_test_rx = None;
+            }
+        }
+    }
+
+    use crate::ai_ocr::AiProvider;
+    ui.label(egui::RichText::new(tl!("AI Vision OCR")).font(theme::semibold(13.0)));
+    egui::Frame::new().fill(t.hover).corner_radius(egui::CornerRadius::same(6)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.add(widgets::checkbox(&mut app.ai_config.enabled, tl!("Enable AI Vision OCR")));
+        ui.label(
+            egui::RichText::new(tl!("Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text."))
+                .small()
+                .color(t.text_muted),
+        );
+        if !app.ai_config.enabled {
+            return;
+        }
+        ui.add_space(6.0);
+
+        ui.horizontal(|ui| {
+            ui.label(tl!("Provider"));
+            let current_provider = app.ai_config.provider;
+            egui::ComboBox::from_id_salt("ai-provider")
+                .selected_text(current_provider.display_name())
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for p in AiProvider::ALL {
+                        if ui.selectable_label(app.ai_config.provider == p, p.display_name()).clicked() {
+                            app.ai_config.provider = p;
+                            app.ai_config.model = p.default_model().to_string();
+                            app.ai_test_status = None;
+                            ui.close();
+                        }
+                    }
+                });
+        });
+
+        // Display provider name explicitly when showing API Key label as requested by user
+        let provider_name = app.ai_config.provider.display_name();
+        ui.horizontal(|ui| {
+            let label = ui.label(format!("{}:", crate::i18n::fmt(tl!("API Key ({provider})"), &[("provider", provider_name)])));
+            ui.add(egui::TextEdit::singleline(&mut app.ai_config.api_key).password(true).desired_width(260.0)).labelled_by(label.id);
+        });
+
+        ui.horizontal(|ui| {
+            ui.label(tl!("Model"));
+            let presets = app.ai_config.provider.presets();
+            egui::ComboBox::from_id_salt("ai-model")
+                .selected_text(&app.ai_config.model)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for &m in presets {
+                        if ui.selectable_label(app.ai_config.model == m, m).clicked() {
+                            app.ai_config.model = m.to_string();
+                            ui.close();
+                        }
+                    }
+                });
+        });
+        ui.horizontal(|ui| {
+            let label = ui.label(tl!("Custom Model"));
+            ui.add(egui::TextEdit::singleline(&mut app.ai_config.model).desired_width(220.0)).labelled_by(label.id);
+        });
+
+        if app.ai_config.provider == AiProvider::Custom {
+            ui.horizontal(|ui| {
+                let label = ui.label(tl!("Endpoint URL"));
+                ui.add(egui::TextEdit::singleline(&mut app.ai_config.custom_endpoint).desired_width(260.0)).labelled_by(label.id);
+            });
+        }
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if widgets::pill_button(ui, tl!("Test Connection"), false).clicked() {
+                let config = app.ai_config.clone();
+                let (tx, rx) = std::sync::mpsc::channel();
+                let ctx = ui.ctx().clone();
+                app.ai_testing = true;
+                app.ai_test_status = None;
+                std::thread::spawn(move || {
+                    let res = crate::ai_ocr::test_connection(&config);
+                    let _ = tx.send(res);
+                    ctx.request_repaint();
+                });
+                app.ai_test_rx = Some(rx);
+            }
+
+            if app.ai_testing {
+                ui.spinner();
+                ui.label(tl!("Connecting…"));
+            } else if let Some(ref status) = app.ai_test_status {
+                match status {
+                    Ok(msg) => {
+                        ui.label(egui::RichText::new(format!("✓ {msg}")).color(t.selected));
+                    }
+                    Err(err) => {
+                        ui.label(egui::RichText::new(format!("✗ {err}")).color(egui::Color32::from_rgb(220, 50, 50)));
+                    }
+                }
+            }
+        });
+    });
 }
 
 /// Preferences ▸ Date format: a preset, or any pattern typed in, for Fill & Sign dates, and the
