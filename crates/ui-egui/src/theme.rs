@@ -218,6 +218,10 @@ pub fn install_fonts_for(ctx: &egui::Context, cjk: CjkPreference) {
 pub const SYSTEM_FALLBACK: &str = "system-fallback";
 /// The name of the installed Devanagari (Hindi) face [`installed_font_definitions`] may add.
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
+/// The name of the installed Thai face [`installed_font_definitions`] may add.
+pub const SYSTEM_THAI_FALLBACK: &str = "system-thai-fallback";
+/// The name of the installed CJK face [`installed_font_definitions`] may add when no embedded CJK font exists.
+pub const SYSTEM_CJK_FALLBACK: &str = "system-cjk-fallback";
 
 /// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
 /// already installed on this machine. It only draws characters no embedded face has.
@@ -233,6 +237,8 @@ pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// An installed Devanagari face, when there is one, ends every family just before that one, so
 /// Hindi text draws in a build without a Devanagari face.
 ///
+/// An installed Thai face draws Thai text when one is installed on the machine.
+///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
     #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
@@ -245,6 +251,20 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
             fonts.font_data.insert(SYSTEM_DEVANAGARI_FALLBACK.to_owned(), data);
             for stack in fonts.families.values_mut() {
                 stack.push(SYSTEM_DEVANAGARI_FALLBACK.to_owned());
+            }
+        }
+        if let Some(data) = crate::system_fonts::thai_fallback() {
+            fonts.font_data.insert(SYSTEM_THAI_FALLBACK.to_owned(), data);
+            for stack in fonts.families.values_mut() {
+                stack.push(SYSTEM_THAI_FALLBACK.to_owned());
+            }
+        }
+        if pdfcraft_fonts::ui_japanese_fonts().is_empty() && pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+            if let Some(data) = fallback(Need::Hans) {
+                fonts.font_data.insert(SYSTEM_CJK_FALLBACK.to_owned(), data);
+                for stack in fonts.families.values_mut() {
+                    stack.push(SYSTEM_CJK_FALLBACK.to_owned());
+                }
             }
         }
         let need = match cjk {

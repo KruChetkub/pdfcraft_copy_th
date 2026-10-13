@@ -22,6 +22,8 @@ const MAX_FACES: u32 = 16;
 const PROBE: char = '\u{0627}';
 /// Devanagari letter ka: the face must have it to cover Hindi.
 const DEVANAGARI_PROBE: char = '\u{0915}';
+/// Thai letter ko kai: the face must have it to cover Thai.
+const THAI_PROBE: char = '\u{0E01}';
 /// 欢 (U+6B22): Simplified only, absent from the Japanese craft-fonts faces.
 const HANS_PROBE: char = '\u{6B22}';
 /// 說 (U+8AAA): Traditional only, absent from the Japanese craft-fonts faces.
@@ -110,6 +112,58 @@ fn devanagari_candidates() -> Vec<PathBuf> {
             "google-droid-sans-fonts/DroidSansDevanagari-Regular.ttf",
             "samyak-fonts/Samyak-Devanagari.ttf",
             "gargi/Gargi.ttf",
+        ])
+    }
+}
+
+/// The installed fallback face for Thai, read once. `None` when it is turned off
+/// or no candidate is installed; the interface then draws what the embedded faces can.
+pub fn thai_fallback() -> Option<Arc<FontData>> {
+    static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+                return None;
+            }
+            thai_candidates().iter().find_map(|path| read(path, THAI_PROBE, MAX_BYTES))
+        })
+        .clone()
+}
+
+/// Well-known locations of Thai faces, best first.
+fn thai_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) {
+        ["LeelawUI.ttf", "leelawui.ttf", "LeelaUIb.ttf", "leelawad.ttf", "tahoma.ttf", "angsana.ttf", "cordia.ttf"]
+            .iter()
+            .map(|f| windows_fonts().join(f))
+            .collect()
+    } else if cfg!(target_os = "macos") {
+        [
+            "/System/Library/Fonts/Supplemental/Thonburi.ttc",
+            "/System/Library/Fonts/Thonburi.ttc",
+            "/System/Library/Fonts/Supplemental/SukhumvitSet.ttc",
+            "/System/Library/Fonts/Supplemental/Ayuthaya.ttf",
+            "/System/Library/Fonts/Supplemental/Sathu.ttf",
+            "/System/Library/Fonts/Supplemental/Silom.ttf",
+            "/Library/Fonts/Arial Unicode.ttf",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    } else {
+        unix_fonts(&[
+            "truetype/thai/Loma.ttf",
+            "truetype/tlwg/Loma.ttf",
+            "truetype/tlwg/Garuda.ttf",
+            "truetype/tlwg/Kinnari.ttf",
+            "truetype/tlwg/Norasi.ttf",
+            "truetype/tlwg/TlwgTypist.ttf",
+            "truetype/noto/NotoSansThai-Regular.ttf",
+            "truetype/noto/NotoSansThaiUI-Regular.ttf",
+            "noto/NotoSansThai-Regular.ttf",
+            "noto/NotoSansThaiUI-Regular.ttf",
+            "google-noto/NotoSansThai-Regular.ttf",
+            "google-noto/NotoSansThaiUI-Regular.ttf",
         ])
     }
 }
@@ -225,6 +279,7 @@ mod tests {
         assert_eq!(face_with(inter, PROBE), None);
         assert_eq!(face_with(inter, HANS_PROBE), None);
         assert_eq!(face_with(inter, HANT_PROBE), None);
+        assert_eq!(face_with(inter, THAI_PROBE), None);
         assert_eq!(face_with(inter, 'A'), Some(0));
     }
 
@@ -242,6 +297,9 @@ mod tests {
             assert!(!list.is_empty(), "{need:?}");
             assert!(list.iter().all(|p| p.extension().is_some_and(|e| e == "ttf" || e == "ttc")), "{need:?}");
         }
+        let thai_list = thai_candidates();
+        assert!(!thai_list.is_empty(), "thai");
+        assert!(thai_list.iter().all(|p| p.extension().is_some_and(|e| e == "ttf" || e == "ttc")), "thai");
     }
 
     #[test]
@@ -252,5 +310,11 @@ mod tests {
                 assert!(!["notosanscjk", "notoserifcjk", "sourcehan", "source-han"].iter().any(|b| name.contains(b)), "{name}");
             }
         }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_finds_thai_fallback() {
+        assert!(thai_fallback().is_some());
     }
 }
