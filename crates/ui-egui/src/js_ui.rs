@@ -514,7 +514,9 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
             match s {
                 "AI Vision OCR" => "AI Vision OCR (แปลงข้อความด้วย AI)",
                 "Enable AI Vision OCR" => "เปิดใช้งาน AI Vision OCR",
-                "Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text." => "สกัดข้อความจากภาพด้วยโมเดล AI Vision เพื่อความแม่นยำ 100% สำหรับภาษาไทยและหลายภาษา",
+                "Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text." => {
+                    "สกัดข้อความจากภาพด้วยโมเดล AI Vision เพื่อความแม่นยำ 100% สำหรับภาษาไทยและหลายภาษา"
+                }
                 "Provider" => "ผู้ให้บริการ",
                 "Model" => "โมเดล",
                 "Custom Model" => "โมเดลที่กำหนดเอง",
@@ -532,9 +534,11 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         ui.set_width(ui.available_width());
         ui.add(widgets::checkbox(&mut app.ai_config.enabled, ai_tr("Enable AI Vision OCR")));
         ui.label(
-            egui::RichText::new(ai_tr("Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text."))
-                .small()
-                .color(t.text_muted),
+            egui::RichText::new(ai_tr(
+                "Extracts text from page images using cloud or local AI Vision models with 100% exact fidelity for Thai and multilingual text.",
+            ))
+            .small()
+            .color(t.text_muted),
         );
         if !app.ai_config.enabled {
             return;
@@ -544,19 +548,16 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         ui.horizontal(|ui| {
             ui.label(ai_tr("Provider"));
             let current_provider = app.ai_config.provider;
-            egui::ComboBox::from_id_salt("ai-provider")
-                .selected_text(current_provider.display_name())
-                .width(220.0)
-                .show_ui(ui, |ui| {
-                    for p in AiProvider::ALL {
-                        if ui.selectable_label(app.ai_config.provider == p, p.display_name()).clicked() {
-                            app.ai_config.provider = p;
-                            app.ai_config.model = p.default_model().to_string();
-                            app.ai_test_status = None;
-                            ui.close();
-                        }
+            egui::ComboBox::from_id_salt("ai-provider").selected_text(current_provider.display_name()).width(220.0).show_ui(ui, |ui| {
+                for p in AiProvider::ALL {
+                    if ui.selectable_label(app.ai_config.provider == p, p.display_name()).clicked() {
+                        app.ai_config.provider = p;
+                        app.ai_config.model = p.default_model().to_string();
+                        app.ai_test_status = None;
+                        ui.close();
                     }
-                });
+                }
+            });
         });
 
         // Display provider name explicitly when showing API Key label as requested by user
@@ -569,17 +570,14 @@ fn ai_ocr_preferences(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         ui.horizontal(|ui| {
             ui.label(ai_tr("Model"));
             let presets = app.ai_config.provider.presets();
-            egui::ComboBox::from_id_salt("ai-model")
-                .selected_text(&app.ai_config.model)
-                .width(220.0)
-                .show_ui(ui, |ui| {
-                    for &m in presets {
-                        if ui.selectable_label(app.ai_config.model == m, m).clicked() {
-                            app.ai_config.model = m.to_string();
-                            ui.close();
-                        }
+            egui::ComboBox::from_id_salt("ai-model").selected_text(&app.ai_config.model).width(220.0).show_ui(ui, |ui| {
+                for &m in presets {
+                    if ui.selectable_label(app.ai_config.model == m, m).clicked() {
+                        app.ai_config.model = m.to_string();
+                        ui.close();
                     }
-                });
+                }
+            });
         });
         ui.horizontal(|ui| {
             let label = ui.label(ai_tr("Custom Model"));

@@ -259,12 +259,13 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(SYSTEM_THAI_FALLBACK.to_owned());
             }
         }
-        if pdfcraft_fonts::ui_japanese_fonts().is_empty() && pdfcraft_fonts::ui_chinese_fonts().is_empty() {
-            if let Some(data) = fallback(Need::Hans) {
-                fonts.font_data.insert(SYSTEM_CJK_FALLBACK.to_owned(), data);
-                for stack in fonts.families.values_mut() {
-                    stack.push(SYSTEM_CJK_FALLBACK.to_owned());
-                }
+        if pdfcraft_fonts::ui_japanese_fonts().is_empty()
+            && pdfcraft_fonts::ui_chinese_fonts().is_empty()
+            && let Some(data) = fallback(Need::Hans)
+        {
+            fonts.font_data.insert(SYSTEM_CJK_FALLBACK.to_owned(), data);
+            for stack in fonts.families.values_mut() {
+                stack.push(SYSTEM_CJK_FALLBACK.to_owned());
             }
         }
         let need = match cjk {

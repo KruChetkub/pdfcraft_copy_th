@@ -2,8 +2,8 @@
 //!
 //! Supports Google Gemini, OpenAI, Anthropic Claude, and Custom OpenAI-compatible endpoints.
 
-use serde::{Deserialize, Serialize};
 use pdfcraft_engine::ocr::PlacedWord;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AiProvider {
@@ -14,12 +14,7 @@ pub enum AiProvider {
 }
 
 impl AiProvider {
-    pub const ALL: [AiProvider; 4] = [
-        AiProvider::Gemini,
-        AiProvider::OpenAi,
-        AiProvider::Anthropic,
-        AiProvider::Custom,
-    ];
+    pub const ALL: [AiProvider; 4] = [AiProvider::Gemini, AiProvider::OpenAi, AiProvider::Anthropic, AiProvider::Custom];
 
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -73,19 +68,12 @@ impl Default for AiConfig {
 #[cfg(not(target_arch = "wasm32"))]
 fn http_agent() -> Result<ureq::Agent, String> {
     let roots = rustls_native_certs::load_native_certs();
-    let certs: Vec<ureq::tls::Certificate<'static>> =
-        roots.certs.iter().map(|c| ureq::tls::Certificate::from_der(c.as_ref()).to_owned()).collect();
+    let certs: Vec<ureq::tls::Certificate<'static>> = roots.certs.iter().map(|c| ureq::tls::Certificate::from_der(c.as_ref()).to_owned()).collect();
     if certs.is_empty() {
         return Err("No trusted system certificates found".into());
     }
-    let tls_config = ureq::tls::TlsConfig::builder()
-        .root_certs(ureq::tls::RootCerts::new_with_certs(&certs))
-        .build();
-    Ok(ureq::Agent::config_builder()
-        .timeout_global(Some(std::time::Duration::from_secs(45)))
-        .tls_config(tls_config)
-        .build()
-        .new_agent())
+    let tls_config = ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::new_with_certs(&certs)).build();
+    Ok(ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(45))).tls_config(tls_config).build().new_agent())
 }
 
 /// Test connection to the configured AI Provider.
@@ -176,9 +164,7 @@ pub fn test_connection(config: &AiConfig) -> Result<String, String> {
                 if !config.api_key.trim().is_empty() {
                     req = req.header("Authorization", &format!("Bearer {}", config.api_key.trim()));
                 }
-                let mut resp = req
-                    .send(payload.to_string().as_bytes())
-                    .map_err(|e| format!("Custom endpoint connection failed: {e}"))?;
+                let mut resp = req.send(payload.to_string().as_bytes()).map_err(|e| format!("Custom endpoint connection failed: {e}"))?;
                 if resp.status().as_u16() != 200 {
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("Custom endpoint HTTP {}: {err}", resp.status().as_u16()));
@@ -265,19 +251,13 @@ Do not wrap in markdown code fences, return pure JSON.";
                     .header("Content-Type", "application/json")
                     .send(payload.to_string().as_bytes())
                     .map_err(|e| format!("Gemini Vision OCR failed: {e}"))?;
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Gemini invalid JSON response: {e}"))?;
-                body["candidates"][0]["content"]["parts"][0]["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string()
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Gemini invalid JSON response: {e}"))?;
+                body["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or_default().to_string()
             }
             AiProvider::OpenAi | AiProvider::Custom => {
-                let url = if config.provider == AiProvider::Custom {
-                    config.custom_endpoint.trim()
-                } else {
-                    "https://api.openai.com/v1/chat/completions"
-                };
+                let url =
+                    if config.provider == AiProvider::Custom { config.custom_endpoint.trim() } else { "https://api.openai.com/v1/chat/completions" };
                 let payload = serde_json::json!({
                     "model": config.model.trim(),
                     "messages": [{
@@ -299,12 +279,9 @@ Do not wrap in markdown code fences, return pure JSON.";
                     req = req.header("Authorization", &format!("Bearer {}", config.api_key.trim()));
                 }
                 let mut resp = req.send(payload.to_string().as_bytes()).map_err(|e| format!("AI Vision request failed: {e}"))?;
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Invalid JSON response: {e}"))?;
-                body["choices"][0]["message"]["content"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string()
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Invalid JSON response: {e}"))?;
+                body["choices"][0]["message"]["content"].as_str().unwrap_or_default().to_string()
             }
             AiProvider::Anthropic => {
                 let url = "https://api.anthropic.com/v1/messages";
@@ -333,12 +310,9 @@ Do not wrap in markdown code fences, return pure JSON.";
                     .header("anthropic-version", "2023-06-01")
                     .send(payload.to_string().as_bytes())
                     .map_err(|e| format!("Claude Vision OCR failed: {e}"))?;
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Claude invalid JSON response: {e}"))?;
-                body["content"][0]["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string()
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Claude invalid JSON response: {e}"))?;
+                body["content"][0]["text"].as_str().unwrap_or_default().to_string()
             }
         };
 
@@ -397,20 +371,13 @@ Output ONLY the clean, exact transcribed text in natural reading order without a
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("Gemini HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Gemini invalid JSON response: {e}"))?;
-                Ok(body["candidates"][0]["content"]["parts"][0]["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_string())
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Gemini invalid JSON response: {e}"))?;
+                Ok(body["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or_default().trim().to_string())
             }
             AiProvider::OpenAi | AiProvider::Custom => {
-                let url = if config.provider == AiProvider::Custom {
-                    config.custom_endpoint.trim()
-                } else {
-                    "https://api.openai.com/v1/chat/completions"
-                };
+                let url =
+                    if config.provider == AiProvider::Custom { config.custom_endpoint.trim() } else { "https://api.openai.com/v1/chat/completions" };
                 let payload = serde_json::json!({
                     "model": config.model.trim(),
                     "messages": [{
@@ -436,13 +403,9 @@ Output ONLY the clean, exact transcribed text in natural reading order without a
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("AI HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Invalid JSON response: {e}"))?;
-                Ok(body["choices"][0]["message"]["content"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_string())
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Invalid JSON response: {e}"))?;
+                Ok(body["choices"][0]["message"]["content"].as_str().unwrap_or_default().trim().to_string())
             }
             AiProvider::Anthropic => {
                 let url = "https://api.anthropic.com/v1/messages";
@@ -475,13 +438,9 @@ Output ONLY the clean, exact transcribed text in natural reading order without a
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("Claude HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Claude invalid JSON response: {e}"))?;
-                Ok(body["content"][0]["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_string())
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Claude invalid JSON response: {e}"))?;
+                Ok(body["content"][0]["text"].as_str().unwrap_or_default().trim().to_string())
             }
         }
     }
@@ -489,18 +448,12 @@ Output ONLY the clean, exact transcribed text in natural reading order without a
 
 /// Parses the AI's OCR JSON response into PlacedWords in PDF user space.
 pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) -> Result<Vec<PlacedWord>, String> {
-    let clean = json_text
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
+    let clean = json_text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
 
     let parsed: serde_json::Value = serde_json::from_str(clean).map_err(|e| format!("Failed to parse OCR JSON: {e}"))?;
 
-    let items = parsed.as_array().or_else(|| parsed.get("items").and_then(|v| v.as_array())).ok_or_else(|| {
-        "Expected JSON array of OCR items".to_string()
-    })?;
+    let items =
+        parsed.as_array().or_else(|| parsed.get("items").and_then(|v| v.as_array())).ok_or_else(|| "Expected JSON array of OCR items".to_string())?;
 
     let mut words = Vec::new();
 
@@ -511,19 +464,11 @@ pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) ->
         }
 
         // Box: [ymin, xmin, ymax, xmax] in 0..1000
-        let coords = item.get("box")
-            .or_else(|| item.get("box_2d"))
-            .or_else(|| item.get("rect"))
-            .and_then(|v| v.as_array());
+        let coords = item.get("box").or_else(|| item.get("box_2d")).or_else(|| item.get("rect")).and_then(|v| v.as_array());
 
         let (ymin, xmin, ymax, xmax) = if let Some(arr) = coords {
             if arr.len() == 4 {
-                (
-                    arr[0].as_f64().unwrap_or(0.0),
-                    arr[1].as_f64().unwrap_or(0.0),
-                    arr[2].as_f64().unwrap_or(100.0),
-                    arr[3].as_f64().unwrap_or(100.0),
-                )
+                (arr[0].as_f64().unwrap_or(0.0), arr[1].as_f64().unwrap_or(0.0), arr[2].as_f64().unwrap_or(100.0), arr[3].as_f64().unwrap_or(100.0))
             } else {
                 continue;
             }
@@ -551,24 +496,14 @@ pub fn parse_ocr_response(json_text: &str, page_width: f64, page_height: f64) ->
             let mut curr_x = left;
             for (i, sw) in sub_words.iter().enumerate() {
                 let word_w = unit_w * (sw.chars().count() as f64);
-                words.push(PlacedWord {
-                    text: sw.to_string(),
-                    origin: [curr_x, bottom],
-                    across: [word_w, 0.0],
-                    up: [0.0, height],
-                });
+                words.push(PlacedWord { text: sw.to_string(), origin: [curr_x, bottom], across: [word_w, 0.0], up: [0.0, height] });
                 curr_x += word_w;
                 if i < sub_words.len() - 1 {
                     curr_x += space_w;
                 }
             }
         } else {
-            words.push(PlacedWord {
-                text: text.to_string(),
-                origin: [left, bottom],
-                across: [width, 0.0],
-                up: [0.0, height],
-            });
+            words.push(PlacedWord { text: text.to_string(), origin: [left, bottom], across: [width, 0.0], up: [0.0, height] });
         }
     }
 
@@ -597,11 +532,7 @@ pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) 
                     config.model.trim(),
                     config.api_key.trim()
                 );
-                let full_prompt = if system_prompt.is_empty() {
-                    user_prompt.to_string()
-                } else {
-                    format!("{system_prompt}\n\n{user_prompt}")
-                };
+                let full_prompt = if system_prompt.is_empty() { user_prompt.to_string() } else { format!("{system_prompt}\n\n{user_prompt}") };
                 let payload = serde_json::json!({
                     "contents": [{
                         "parts": [{"text": full_prompt}]
@@ -616,19 +547,13 @@ pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) 
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("Gemini HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Gemini invalid JSON: {e}"))?;
-                Ok(body["candidates"][0]["content"]["parts"][0]["text"]
-                    .as_str()
-                    .unwrap_or("No response text returned.")
-                    .to_string())
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Gemini invalid JSON: {e}"))?;
+                Ok(body["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or("No response text returned.").to_string())
             }
             AiProvider::OpenAi | AiProvider::Custom => {
-                let url = if config.provider == AiProvider::Custom {
-                    config.custom_endpoint.trim()
-                } else {
-                    "https://api.openai.com/v1/chat/completions"
-                };
+                let url =
+                    if config.provider == AiProvider::Custom { config.custom_endpoint.trim() } else { "https://api.openai.com/v1/chat/completions" };
                 let mut messages = Vec::new();
                 if !system_prompt.is_empty() {
                     messages.push(serde_json::json!({"role": "system", "content": system_prompt}));
@@ -648,12 +573,8 @@ pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) 
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("AI HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Invalid JSON: {e}"))?;
-                Ok(body["choices"][0]["message"]["content"]
-                    .as_str()
-                    .unwrap_or("No response content returned.")
-                    .to_string())
+                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Invalid JSON: {e}"))?;
+                Ok(body["choices"][0]["message"]["content"].as_str().unwrap_or("No response content returned.").to_string())
             }
             AiProvider::Anthropic => {
                 let url = "https://api.anthropic.com/v1/messages";
@@ -663,9 +584,12 @@ pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) 
                 if !system_prompt.is_empty() {
                     payload_map.insert("system".into(), serde_json::json!(system_prompt));
                 }
-                payload_map.insert("messages".into(), serde_json::json!([
-                    {"role": "user", "content": user_prompt}
-                ]));
+                payload_map.insert(
+                    "messages".into(),
+                    serde_json::json!([
+                        {"role": "user", "content": user_prompt}
+                    ]),
+                );
 
                 let payload = serde_json::Value::Object(payload_map);
                 let mut resp = agent
@@ -679,12 +603,9 @@ pub fn query_ai_text(config: &AiConfig, system_prompt: &str, user_prompt: &str) 
                     let err = resp.body_mut().with_config().limit(4096).read_to_string().unwrap_or_default();
                     return Err(format!("Claude HTTP {}: {err}", resp.status().as_u16()));
                 }
-                let body: serde_json::Value = serde_json::from_reader(resp.body_mut().as_reader())
-                    .map_err(|e| format!("Claude invalid JSON: {e}"))?;
-                Ok(body["content"][0]["text"]
-                    .as_str()
-                    .unwrap_or("No response text returned.")
-                    .to_string())
+                let body: serde_json::Value =
+                    serde_json::from_reader(resp.body_mut().as_reader()).map_err(|e| format!("Claude invalid JSON: {e}"))?;
+                Ok(body["content"][0]["text"].as_str().unwrap_or("No response text returned.").to_string())
             }
         }
     }

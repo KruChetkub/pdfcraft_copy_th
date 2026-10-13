@@ -1,7 +1,11 @@
-use std::sync::{Arc, Mutex};
+use crate::ai_ocr::{AiProvider, query_ai_text, test_connection};
+use crate::{
+    LeftPanel, PdfCraftApp,
+    theme::{self, Tokens},
+    widgets,
+};
 use egui::{Color32, CornerRadius};
-use crate::{LeftPanel, PdfCraftApp, theme::{self, Tokens}, widgets};
-use crate::ai_ocr::{AiProvider, test_connection, query_ai_text};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum AiScope {
@@ -10,6 +14,8 @@ pub enum AiScope {
     CurrentPage,
     SelectedArea,
 }
+
+pub type AsyncAiResult = Arc<Mutex<Option<Result<String, String>>>>;
 
 #[derive(Default)]
 pub struct AiUiState {
@@ -21,7 +27,7 @@ pub struct AiUiState {
     pub is_working: bool,
     pub task_name: Option<String>,
     pub scope: AiScope,
-    pub async_result: Option<Arc<Mutex<Option<Result<String, String>>>>>,
+    pub async_result: Option<AsyncAiResult>,
 }
 
 fn tr(s: &str) -> &str {
@@ -42,11 +48,15 @@ fn tr(s: &str) -> &str {
             "All pages" => "ทุกหน้า",
             "Current page" => "หน้าปัจจุบัน",
             "Select area" => "เลือกพื้นที่",
-            "Drag a rectangle across text on the document to extract only that area with AI." => "ลากเมาส์วาดกรอบสี่เหลี่ยมคลุมข้อความบนหน้ากระดาษ เพื่อให้ AI อ่านและสกัดข้อความเฉพาะพื้นที่ที่เลือก",
+            "Drag a rectangle across text on the document to extract only that area with AI." => {
+                "ลากเมาส์วาดกรอบสี่เหลี่ยมคลุมข้อความบนหน้ากระดาษ เพื่อให้ AI อ่านและสกัดข้อความเฉพาะพื้นที่ที่เลือก"
+            }
             "Click to draw selection area" => "คลิกเพื่อเริ่มวาดเลือกพื้นที่",
             "Drawing mode active: drag on page" => "โหมดวาดพื้นที่เปิดอยู่: ลากเมาส์บนหน้าเอกสาร",
             "Extract text from images (AI OCR)" => "แปลงข้อความจากภาพด้วย AI (OCR)",
-            "Transcribe Thai & English from images into accurate, copyable text layer" => "สกัดข้อความภาษาไทยและอังกฤษจากภาพ แปลงเป็นเลเยอร์ข้อความที่ค้นหาและคัดลอกได้",
+            "Transcribe Thai & English from images into accurate, copyable text layer" => {
+                "สกัดข้อความภาษาไทยและอังกฤษจากภาพ แปลงเป็นเลเยอร์ข้อความที่ค้นหาและคัดลอกได้"
+            }
             "Page" => "หน้า",
             "Cancel" => "ยกเลิก",
             "Draw & Extract Selected Area" => "วาดและสกัดข้อความจากพื้นที่ที่เลือก",
@@ -101,23 +111,22 @@ pub fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
 
     // Check async worker results from previous frames
     if let Some(res_arc) = app.ai_ui_state.async_result.clone() {
-        if let Ok(mut lock) = res_arc.lock() {
-            if let Some(res) = lock.take() {
-                app.ai_ui_state.is_working = false;
-                app.ai_ui_state.async_result = None;
-                app.ai_ui_state.task_name = None;
-                match res {
-                    Ok(text) => {
-                        #[cfg(not(target_arch = "wasm32"))]
-                        if let Ok(mut cb) = arboard::Clipboard::new() {
-                            let _ = cb.set_text(text.clone());
-                        }
-                        notify_ai(app, "Text copied to clipboard!");
-                        app.ai_ui_state.response_text = Some(text);
+        let res_opt = res_arc.lock().ok().and_then(|mut lock| lock.take());
+        if let Some(res) = res_opt {
+            app.ai_ui_state.is_working = false;
+            app.ai_ui_state.async_result = None;
+            app.ai_ui_state.task_name = None;
+            match res {
+                Ok(text) => {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Ok(mut cb) = arboard::Clipboard::new() {
+                        let _ = cb.set_text(text.clone());
                     }
-                    Err(err) => {
-                        app.notify_fmt("AI error: {err}", &[("err", &err)]);
-                    }
+                    notify_ai(app, "Text copied to clipboard!");
+                    app.ai_ui_state.response_text = Some(text);
+                }
+                Err(err) => {
+                    app.notify_fmt("AI error: {err}", &[("err", &err)]);
                 }
             }
         }
@@ -358,14 +367,17 @@ pub fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
 
         // --- 4. Feature 2: Summarize Document ---
         widgets::section_title(ui, tr("Document Intelligence"));
-        
+
+        let sum_prompt = "You are an intelligent document assistant. Summarize the following document clearly, accurately, and concisely in Thai.";
+        let trans_prompt = "You are an expert translator. Translate the key content of this document into natural, professional Thai.";
+
         ui.horizontal(|ui| {
             if ui.button(format!("✨ {}", tr("Summarize"))).on_hover_text(tr("Summarize document content in Thai")).clicked() {
-                trigger_ai_action(app, "Summarize", "You are an intelligent document assistant. Summarize the following document clearly, accurately, and concisely in Thai.");
+                trigger_ai_action(app, "Summarize", sum_prompt);
             }
 
             if ui.button(format!("🌐 {}", tr("Translate"))).on_hover_text(tr("Translate document text to Thai")).clicked() {
-                trigger_ai_action(app, "Translate", "You are an expert translator. Translate the key content of this document into natural, professional Thai.");
+                trigger_ai_action(app, "Translate", trans_prompt);
             }
         });
 
@@ -386,7 +398,9 @@ pub fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             if question.is_empty() {
                 notify_ai(app, "Please enter a question");
             } else {
-                let sys_prompt = format!("You are a knowledgeable assistant. Answer the user's question accurately based ONLY on the provided document text in Thai.\nQuestion: {question}");
+                let sys_prompt = format!(
+                    "You are a knowledgeable assistant. Answer the user's question accurately based ONLY on the provided document text in Thai.\nQuestion: {question}"
+                );
                 trigger_ai_action(app, "Ask", &sys_prompt);
             }
         }

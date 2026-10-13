@@ -228,11 +228,7 @@ pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
             current_is_uni = false;
         }
 
-        let width = if is_uni {
-            (w.text.encode_utf16().count() as f64).max(1.0)
-        } else {
-            helvetica_width(&w.text, 1.0)
-        };
+        let width = if is_uni { (w.text.encode_utf16().count() as f64).max(1.0) } else { helvetica_width(&w.text, 1.0) };
         let height = w.up[0].hypot(w.up[1]);
         if width <= 0.0 || height <= 0.0 {
             continue;

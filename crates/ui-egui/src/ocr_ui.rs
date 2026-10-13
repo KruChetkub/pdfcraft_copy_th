@@ -150,11 +150,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         } else {
             "AI Vision OCR is not configured. Please set your API key in Preferences ▸ AI Vision OCR."
         };
-        ui.label(
-            egui::RichText::new(msg)
-                .small()
-                .color(t.text_muted),
-        );
+        ui.label(egui::RichText::new(msg).small().color(t.text_muted));
         ui.add_space(6.0);
     } else if !d.use_ai && !available {
         ui.label(
@@ -206,9 +202,7 @@ impl PdfCraftApp {
         let work = move || {
             let result = if use_ai {
                 Ok(job.run_with(
-                    |rgba, w, h, pw, ph| {
-                        crate::ai_ocr::recognize_page_with_ai(&ai_config, rgba, w, h, pw, ph)
-                    },
+                    |rgba, w, h, pw, ph| crate::ai_ocr::recognize_page_with_ai(&ai_config, rgba, w, h, pw, ph),
                     |done, total| {
                         let Ok(mut s) = p.lock() else { return false };
                         s.done = done;

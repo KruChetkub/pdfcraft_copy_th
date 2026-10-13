@@ -175,19 +175,9 @@ impl PdfCraftApp {
             self.notify_tr("The selected area is too large");
             return;
         }
-        let config = RenderConfig {
-            password: doc.password.as_deref().map(std::sync::Arc::from),
-            ..RenderConfig::default()
-        };
+        let config = RenderConfig { password: doc.password.as_deref().map(std::sync::Arc::from), ..RenderConfig::default() };
         let mut r = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), config);
-        let out = r.render(RenderRequest {
-            page,
-            kind: RequestKind::Pixels,
-            tile: Some(tile),
-            scale,
-            tag: 0,
-            preview: false,
-        });
+        let out = r.render(RenderRequest { page, kind: RequestKind::Pixels, tile: Some(tile), scale, tag: 0, preview: false });
         if let Some(e) = out.error {
             self.notify_fmt("Render error: {e}", &[("e", &e)]);
             return;
@@ -208,10 +198,21 @@ impl PdfCraftApp {
         let res_arc = std::sync::Arc::new(std::sync::Mutex::new(None));
         self.ai_ui_state.async_result = Some(res_arc.clone());
         self.ai_ui_state.is_working = true;
-        self.ai_ui_state.task_name = Some(if crate::i18n::current().code() == "th" { "สกัดข้อความจากพื้นที่ที่เลือก" } else { "Selected area text extraction" }.to_string());
+        self.ai_ui_state.task_name = Some(
+            if crate::i18n::current().code() == "th" {
+                "สกัดข้อความจากพื้นที่ที่เลือก"
+            } else {
+                "Selected area text extraction"
+            }
+            .to_string(),
+        );
         self.left = crate::LeftPanel::Tool("ai");
         self.left_open = true;
-        self.notify(if crate::i18n::current().code() == "th" { "กำลังสกัดข้อความจากพื้นที่ที่เลือกด้วย AI…" } else { "Extracting text from selected area with AI…" });
+        self.notify(if crate::i18n::current().code() == "th" {
+            "กำลังสกัดข้อความจากพื้นที่ที่เลือกด้วย AI…"
+        } else {
+            "Extracting text from selected area with AI…"
+        });
 
         #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(move || {
